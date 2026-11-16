@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="vi"><head><meta charset="utf-8"><title>Demo dự báo giao thông</title>
+<style>
+ body{font-family:system-ui,sans-serif;max-width:900px;margin:24px auto;padding:0 12px}
+ select,button{padding:6px;margin:4px 6px 4px 0} table{border-collapse:collapse;width:100%;margin-top:12px}
+ td,th{border:1px solid #ccc;padding:4px 8px;text-align:right} th{background:#f3f3f3}
+ .THÔNG\ THOÁNG{color:#1a7f37}.CHẬM{color:#b08800}.KẸT{color:#d9730d}.KẸT\ NẶNG{color:#cf222e}
+</style></head><body>
+<h2>Dự báo tốc độ (km/h)</h2>
+<div>
+ <select id="ses"></select><select id="date"></select><select id="seg" style="max-width:360px"></select>
+ <select id="hor"><option>5,10,15,20,25,30</option><option>5</option><option>15</option><option>30</option></select>
+ <button onclick="go()">Dự báo</button>
+</div>
+<div id="info"></div><div id="out"></div>
+<script>
+let M;
+const $=id=>document.getElementById(id);
+async function init(){
+  M=await (await fetch('/meta')).json();
+  $('ses').innerHTML=Object.entries(M.sessions).map(([k,v])=>`<option value="${k}">${v.label}</option>`).join('');
+  $('ses').onchange=fill; fill();
+}
+function fill(){
+  const s=M.sessions[$('ses').value];
+  $('date').innerHTML=[...s.test_dates.map(d=>[d,'test']),...s.train_dates.map(d=>[d,'train'])]
+    .map(([d,t])=>`<option value="${d}">${d} (${t})</option>`).join('');
+  $('seg').innerHTML=s.segments.map(x=>`<option value="${x.segment}">${x.road} — ${x.segment}</option>`).join('');
+}
+async function go(){
+  const q=new URLSearchParams({session:$('ses').value,date:$('date').value,segment:$('seg').value,horizons:$('hor').value});
+  const r=await fetch('/forecast?'+q); const d=await r.json();
+  if(!r.ok){$('out').textContent=d.detail;return}
+  $('info').innerHTML=`<p>${d.road} · ${d.is_test_day?'ngày TEST':'ngày TRAIN'} · giờ gốc sớm nhất ${d.first_origin} ·
+    MAE: ${Object.entries(d.mae_by_horizon).map(([h,v])=>h+"p="+v).join(' | ')}</p>`;
+  let h='<table><tr><th>Đứng ở</th><th>Hiện tại</th>'+d.horizons.map(x=>`<th>+${x}p dự báo / thực</th>`).join('')+'</tr>';
+  for(const p of d.points){
+    h+=`<tr><td>${p.origin_time}</td><td>${p.current}</td>`+d.horizons.map(x=>{
+      const f=p.forecast[x];return `<td class="${f.status}">${f.time}: ${f.predicted} / ${f.actual??'—'}</td>`}).join('')+'</tr>';
+  }
+  $('out').innerHTML=h+'</table>';
+}
+init();
+</script></body></html>
